@@ -55,14 +55,14 @@ Built-in made-up cases:
 Run the logic tests with:
 
 ```sh
-node --test tests/
+node --test 'tests/*.test.mjs'
 ```
 
 ## Hosting (GitHub Pages)
 
-Static files only, with no build step. After this branch is merged to `main`:
-1. Go to Repository → Settings → Pages → Source and choose **GitHub Actions**.
-2. `.github/workflows/pages.yml` runs the tests and deploys on each push to `main`.
+Static files only, with no build step. In Repository → Settings → Pages → Source, choose **GitHub Actions**.
+- `.github/workflows/static.yml` deploys the site on each push to `main`.
+- `.github/workflows/test.yml` runs the logic tests on pushes and pull requests.
 
 To run it locally, use `python3 -m http.server` and open http://localhost:8000.
 
