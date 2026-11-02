@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="robots" content="noindex">
+  <title>CMR Perfusion Analyser</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>CMR Perfusion Analyser</h1>
+    <button type="button" id="btn-settings" class="btn ghost" aria-haspopup="dialog">Settings</button>
+  </header>
+
+  <main>
+    <section class="notice disclaimer" role="note">
+      <strong>Decision-support / research tool.</strong> Not for standalone clinical diagnosis. Results depend on the
+      thresholds in Settings, which you must check. Always interpret alongside the images, LGE, and the full clinical picture.
+    </section>
+
+    <section class="notice privacy" role="note">
+      <strong>No patient identifiers.</strong> Do not photograph names, NHS numbers, dates of birth or other identifiers.
+      Frame or crop the photo so that only the results table is visible. Photos are sent to the Claude API to read the numbers.
+      This app does not save photos or values.
+    </section>
+
+    <section class="card" id="testcases">
+      <h2>Test cases</h2>
+      <p class="muted">Load made-up values to check the logic.</p>
+      <div class="btnrow">
+        <button type="button" class="btn" data-case="normal">Normal</button>
+        <button type="button" class="btn" data-case="lad">LAD ischaemia</button>
+        <button type="button" class="btn" data-case="diffuse">Diffuse reduction</button>
+        <button type="button" class="btn ghost" id="btn-clear">Clear all</button>
+      </div>
+      <p class="muted small" id="case-expect"></p>
+    </section>
+
+    <div class="maps">
+      <section class="card map" data-kind="stress"></section>
+      <section class="card map" data-kind="rest"></section>
+    </div>
+
+    <section class="card" id="confirm-card">
+      <h2>Check and confirm</h2>
+      <ul id="issues" class="issues"></ul>
+      <label class="check">
+        <input type="checkbox" id="chk-verified">
+        <span>I have checked every value against the photos.</span>
+      </label>
+      <button type="button" class="btn primary wide" id="btn-confirm" disabled>Confirm and analyse</button>
+    </section>
+
+    <section id="results" hidden>
+      <section class="card">
+        <h2>Summary</h2>
+        <div id="summary"></div>
+        <p class="muted small" id="settings-used"></p>
+      </section>
+
+      <section class="card">
+        <h2>Bullseye plots</h2>
+        <p class="muted small">Each segment: inner half = endocardium, outer half = epicardium. Red outline = abnormal segment
+          (stress MBF AND MPR below cut-off in endo or epi). Tap a segment for its values.</p>
+        <div class="bullseyes">
+          <figure><figcaption>Stress MBF</figcaption><div id="be-stress"></div><div class="legendwrap" id="lg-stress"></div></figure>
+          <figure><figcaption>Rest MBF</figcaption><div id="be-rest"></div><div class="legendwrap" id="lg-rest"></div></figure>
+          <figure><figcaption>Myocardial perfusion reserve</figcaption><div id="be-mpr"></div><div class="legendwrap" id="lg-mpr"></div></figure>
+        </div>
+        <p id="seg-detail" class="seg-detail" aria-live="polite">Tap a segment.</p>
+      </section>
+
+      <section class="card">
+        <h2>Per-segment results</h2>
+        <div class="tablewrap">
+          <table class="results" id="results-table"></table>
+        </div>
+      </section>
+    </section>
+
+    <footer class="muted small">
+      Values are not stored. Settings (and your API key, if you choose) are stored only on this device.
+    </footer>
+  </main>
+
+  <dialog id="settings">
+    <form method="dialog" id="settings-form">
+      <header class="dlg-head">
+        <h2>Settings</h2>
+        <button class="btn ghost" value="close" type="submit">Done</button>
+      </header>
+
+      <fieldset>
+        <legend>Claude API</legend>
+        <label>API key
+          <input type="password" id="set-apikey" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-…">
+        </label>
+        <label class="check"><input type="checkbox" id="set-remember"> <span>Remember key on this device</span></label>
+        <label>Model
+          <input type="text" id="set-model" autocapitalize="off" spellcheck="false">
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Ischaemia thresholds</legend>
+        <p class="warn small">The defaults are placeholders. Replace them with your Chiribiri-based reference values before use.</p>
+        <label>Stress MBF cut-off (ml/g/min)
+          <input type="number" step="0.01" min="0" id="set-stressMbfCutoff" inputmode="decimal">
+        </label>
+        <label>MPR cut-off (stress / rest)
+          <input type="number" step="0.01" min="0" id="set-mprCutoff" inputmode="decimal">
+        </label>
+        <p class="muted small">A segment is abnormal if, in the endo OR the epi layer, stress MBF AND MPR are both below these cut-offs.</p>
+        <label>Endo:epi ratio cut-off (stress; below = inverted)
+          <input type="number" step="0.01" min="0" id="set-endoEpiCutoff" inputmode="decimal">
+        </label>
+        <label>Endo:epi drop vs rest that counts as significant (%)
+          <input type="number" step="1" min="0" id="set-endoEpiDropPct" inputmode="decimal">
+        </label>
+        <p class="muted small">Endo:epi inversion or a significant drop is reported as supporting evidence. It does not change whether a segment is abnormal.</p>
+        <label>Contiguous abnormal segments needed per territory (N)
+          <input type="number" step="1" min="1" max="6" id="set-minContiguous" inputmode="numeric">
+        </label>
+        <label>Abnormal segments needed in every territory to call "diffuse"
+          <input type="number" step="1" min="1" max="6" id="set-diffuseMinPerTerritory" inputmode="numeric">
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Plausibility and display</legend>
+        <label>Flag values below (ml/g/min)
+          <input type="number" step="0.1" min="0" id="set-plausibleMin" inputmode="decimal">
+        </label>
+        <label>Flag values above (ml/g/min)
+          <input type="number" step="0.1" min="0" id="set-plausibleMax" inputmode="decimal">
+        </label>
+        <label>MBF colour-scale maximum
+          <input type="number" step="0.5" min="0.5" id="set-mbfScaleMax" inputmode="decimal">
+        </label>
+        <label>MPR colour-scale maximum
+          <input type="number" step="0.5" min="0.5" id="set-mprScaleMax" inputmode="decimal">
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Coronary territories</legend>
+        <p class="muted small">Edit to match coronary dominance. Segment 17 is not used.</p>
+        <div id="territory-grid" class="territory-grid"></div>
+      </fieldset>
+
+      <div class="btnrow">
+        <button type="button" class="btn ghost" id="btn-reset">Reset to defaults</button>
+        <button class="btn primary" value="close" type="submit">Done</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="zoom" class="zoom">
+    <form method="dialog"><button class="btn ghost" type="submit">Close</button></form>
+    <img id="zoom-img" alt="Photo, enlarged">
+  </dialog>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
